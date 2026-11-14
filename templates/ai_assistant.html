@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block topbar_filters %}
+  <input type="text" id="ai-student-id" value="{{ default_student_id }}" style="width:120px;" />
+{% endblock %}
+
+{% block content %}
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Context-Aware Gemini Career Mentor</div>
+        <div class="panel-subtitle">Grounded in live ML predictions, skill scores, and company match thresholds</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+      <button class="btn btn-ghost" style="font-size:12px;" onclick="sendQuickPrompt('Why is my placement probability at its current level, and what 2 skills should I prioritize first?')">Explain My Odds</button>
+      <button class="btn btn-ghost" style="font-size:12px;" onclick="sendQuickPrompt('Which top 3 companies fit my profile best and how do I prepare for their technical rounds?')">Interview Strategy</button>
+      <button class="btn btn-ghost" style="font-size:12px;" onclick="sendQuickPrompt('Suggest 2 high-impact portfolio projects tailored to my branch and target roles.')">Project Ideas</button>
+    </div>
+
+    <div id="chat-history" class="chat-box">
+      <div class="msg msg-ai">Hello! Enter any Student ID above (e.g., STU0001 to STU1200) and ask me anything about placement readiness, target companies, skill deficits, or interview strategy.</div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <input type="text" id="chat-input" placeholder="Ask your career mentor..." style="flex:1;" onkeydown="if(event.key==='Enter') sendChat()" />
+      <button class="btn btn-primary" onclick="sendChat()">Send</button>
+    </div>
+  </div>
+
+  <div>
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Personalized 30-60-90 Day Upskilling Roadmap</div>
+          <div class="panel-subtitle">Generates structured milestone plan closing exact role skill gaps</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <input type="text" id="roadmap-role" placeholder="Target Role (optional, e.g., Software Development Engineer)" style="flex:1;" />
+        <button class="btn btn-secondary" onclick="generateRoadmap()">Generate Roadmap</button>
+      </div>
+      <div id="roadmap-output" class="markdown-box" style="max-height:250px;overflow-y:auto;">Click "Generate Roadmap" to build a custom 90-day preparation blueprint for the selected student.</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Placement Officer Executive Briefing Generator</div>
+          <div class="panel-subtitle">AI-drafted dean/TPO summary with training interventions</div>
+        </div>
+        <button class="btn btn-primary" onclick="generateExecBrief()">Draft Briefing</button>
+      </div>
+      <div id="exec-output" class="markdown-box" style="max-height:210px;overflow-y:auto;">Click "Draft Briefing" to synthesize batch placement performance and intervention priorities.</div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const historyLog = [];
+
+function appendMsg(role, text) {
+  const box = document.getElementById('chat-history');
+  const div = document.createElement('div');
+  div.className = 'msg ' + (role === 'user' ? 'msg-user' : 'msg-ai');
+  div.textContent = text;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  return div;
+}
+
+function sendQuickPrompt(text) {
+  document.getElementById('chat-input').value = text;
+  sendChat();
+}
+
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  const sid = document.getElementById('ai-student-id').value.trim().toUpperCase() || 'STU0001';
+  input.value = '';
+  appendMsg('user', msg);
+  const pending = appendMsg('assistant', 'Thinking with Gemini...');
+
+  const res = await fetch('/api/ai/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ student_id: sid, message: msg, history: historyLog })
+  });
+  const data = await res.json();
+  pending.textContent = data.reply;
+  historyLog.push({ role: 'user', content: msg }, { role: 'assistant', content: data.reply });
+}
+
+async function generateRoadmap() {
+  const sid = document.getElementById('ai-student-id').value.trim().toUpperCase() || 'STU0001';
+  const role = document.getElementById('roadmap-role').value.trim();
+  const out = document.getElementById('roadmap-output');
+  out.textContent = 'Generating personalized 30-60-90 day roadmap...';
+  const res = await fetch('/api/ai/roadmap', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ student_id: sid, target_role: role })
+  });
+  const data = await res.json();
+  out.textContent = data.roadmap;
+}
+
+async function generateExecBrief() {
+  const out = document.getElementById('exec-output');
+  out.textContent = 'Synthesizing executive placement briefing...';
+  const res = await fetch('/api/ai/batch-summary');
+  const data = await res.json();
+  out.textContent = data.report;
+}
+</script>
+{% endblock %}

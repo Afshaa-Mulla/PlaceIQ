@@ -1,0 +1,46 @@
+company_id,company_name,tier,domain,min_cgpa,max_backlogs,preferred_branches,avg_package_lpa,open_roles_count
+CMP01,Aetheris AI Labs,Product / AI,Artificial Intelligence,8.2,0,"CSE,DS,IT",18.5,2
+CMP02,Vanguard Cloud Systems,Product / Cloud,Cloud Infrastructure,8.0,0,"CSE,IT,ECE",16.0,2
+CMP03,QuantEdge FinTech,FinTech,Algorithmic Finance,8.3,0,"CSE,DS,IT,ECE",19.0,2
+CMP04,NexusCore Software,Product,Enterprise SaaS,7.8,0,"CSE,IT,DS",14.0,2
+CMP05,Stratos DataWorks,Analytics,Data Engineering,7.5,1,"DS,CSE,IT,ECE",12.2,2
+CMP06,Kinetix Robotics,Core / DeepTech,Autonomous Systems,7.8,0,"ECE,MECH,CSE,EE",13.5,2
+CMP07,Helios Semicon,Core / Hardware,VLSI & Semiconductors,7.9,0,"ECE,EE",14.8,1
+CMP08,Titan Heavy Engineering,Core Manufacturing,Industrial Systems,7.2,1,"MECH,EE,CIVIL",9.2,2
+CMP09,Civitas InfraGroup,Core Infrastructure,Smart Cities & Civil,7.0,1,"CIVIL,MECH,EE",8.5,1
+CMP10,VoltGrid Power,Core Energy,Smart Grid & EV,7.3,1,"EE,ECE,MECH",9.8,1
+CMP11,Accenture Strategy & Tech,Consulting,Digital Transformation,6.8,1,"CSE,IT,DS,ECE,EE,MECH,CIVIL",7.8,2
+CMP12,Deloitte Consulting,Consulting,Risk & Analytics,7.2,0,"CSE,IT,DS,ECE,EE",9.5,2
+CMP13,Infosys Specialist Programmer,IT Services+,Digital Engineering,7.5,0,"CSE,IT,DS,ECE",9.5,1
+CMP14,TCS Digital & Prime,IT Services+,Enterprise Solutions,7.0,1,"CSE,IT,DS,ECE,EE,MECH",7.5,2
+CMP15,Cognizant GenC Next,IT Services,Application Services,6.5,1,"CSE,IT,DS,ECE,EE,MECH,CIVIL",6.2,2
+CMP16,Wipro Turbo,IT Services,Cloud & Infra,6.5,1,"CSE,IT,ECE,EE,MECH",6.0,1
+CMP17,Capgemini Exceller,IT Services,Engineering & R&D,6.5,1,"CSE,IT,DS,ECE,EE,MECH,CIVIL",5.8,1
+CMP18,Zomato / Blinkit Tech,Consumer Tech,Hyperlocal Logistics,7.6,0,"CSE,IT,DS",15.5,1
+CMP19,Razorpay Engineering,FinTech,Payments Infrastructure,7.9,0,"CSE,IT,DS",17.5,1
+CMP20,Fractal Analytics,Analytics,Decision Sciences,7.4,0,"DS,CSE,IT,ECE",11.5,1
+CMP21,Mu Sigma,Analytics,Decision Support,6.8,1,"CSE,IT,DS,ECE,EE,MECH,CIVIL",6.8,1
+CMP22,L&T Technology Services,Engineering R&D,Digital Manufacturing,7.0,1,"MECH,EE,ECE,CIVIL,CSE",7.2,2
+CMP23,Siemens Digital Industries,Core / Automation,Industrial Automation,7.6,0,"EE,ECE,MECH,CSE",11.8,1
+CMP24,Bosch Global Software,Mobility Tech,Automotive Software,7.2,0,"ECE,EE,CSE,IT,MECH",8.6,1
+CMP25,ZS Associates,Consulting,Healthcare Analytics,7.4,0,"DS,CSE,IT,ECE,EE,MECH",11.2,1
+CMP26,JPMorgan Chase Tech,BFSI Tech,Global Banking Tech,8.0,0,"CSE,IT,DS,ECE",16.5,1
+CMP27,Barclays Global Service,BFSI Tech,FinTech Operations,7.5,0,"CSE,IT,DS,ECE",12.5,1
+CMP28,Oracle Cloud Infra,Product / Cloud,Database & Cloud,7.8,0,"CSE,IT,DS",15.2,1
+CMP29,Cisco Systems,Networking,Enterprise Security,7.7,0,"CSE,IT,ECE,EE",14.6,1
+CMP30,Schneider Electric,Core Energy,Energy Automation,7.2,1,"EE,ECE,MECH",8.8,1
+CMP31,Tata Motors EV,Automotive,Electric Mobility,7.3,1,"MECH,EE,ECE",9.2,1
+CMP32,Jacobs Engineering,Core Infrastructure,Design & Consulting,7.1,1,"CIVIL,MECH,EE",7.8,1
+CMP33,Afcons Infrastructure,Core Construction,Heavy Civil,6.8,1,"CIVIL,MECH",6.8,1
+CMP34,Freshworks,Product,SaaS CRM,7.6,0,"CSE,IT,DS",13.2,1
+CMP35,Zoho Corporation,Product,Business Suite,7.0,1,"CSE,IT,DS,ECE",8.4,1
+CMP36,Tiger Analytics,Analytics,AI Consulting,7.4,0,"DS,CSE,IT,ECE",11.0,1
+CMP37,PwC India Tech,Consulting,Data & Cloud Advisory,7.0,1,"CSE,IT,DS,ECE,EE",8.5,1
+CMP38,KPMG Digital,Consulting,Tech Assurance,6.9,1,"CSE,IT,DS,ECE,MECH",7.6,1
+CMP39,Mindtree / LTIMindtree,IT Services,Cloud & Data,6.6,1,"CSE,IT,DS,ECE,EE,MECH,CIVIL",5.5,1
+CMP40,Tech Mahindra,IT Services,Telecom & IT,6.2,2,"CSE,IT,ECE,EE,MECH,CIVIL",4.6,1
+CMP41,HCLTech,IT Services,Digital Foundation,6.4,2,"CSE,IT,DS,ECE,EE,MECH,CIVIL",4.8,1
+CMP42,Persistent Systems,Product Engineering,Outsourced Product Dev,7.2,0,"CSE,IT,DS,ECE",7.8,1
+CMP43,PubMatic,AdTech,Programmatic Cloud,7.6,0,"CSE,IT,DS",12.6,1
+CMP44,Godrej & Boyce,Core Manufacturing,Precision Engineering,7.0,1,"MECH,EE,CIVIL",7.4,1
+CMP45,NVIDIA Graphics India,DeepTech / AI,GPU & AI Systems,8.5,0,"CSE,ECE,DS",22.0,1

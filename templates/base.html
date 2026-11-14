@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ page_title }} — {{ app_name }}</title>
+  <link rel="stylesheet" href="/static/css/theme.css" />
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-box">
+        <div class="brand-logo">PQ</div>
+        <div>
+          <div class="brand-title">{{ app_name }}</div>
+          <div class="brand-sub">Career & Placement OS</div>
+        </div>
+      </div>
+
+      <nav class="nav-scroll">
+        {% set ns = namespace(last_group='') %}
+        {% for item in nav_pages %}
+          {% if item.group != ns.last_group %}
+            <div class="nav-group-label">{{ item.group }}</div>
+            {% set ns.last_group = item.group %}
+          {% endif %}
+          <a href="{{ item.path }}" class="nav-item {% if active_slug == item.slug %}active{% endif %}">
+            <i data-lucide="{{ item.icon }}"></i>
+            <span>{{ item.label }}</span>
+          </a>
+        {% endfor %}
+      </nav>
+
+      <div class="sidebar-footer">
+        <div style="margin-bottom:6px;">
+          {% if gemini_ready %}
+            <span class="status-pill ok">● Gemini AI Connected</span>
+          {% else %}
+            <span class="status-pill warn">● Gemini Key Not Set</span>
+          {% endif %}
+        </div>
+        <div>7 Branches · 4 Batches · 45 Recruiters</div>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <button class="btn btn-ghost" onclick="document.getElementById('sidebar').classList.toggle('open')" style="padding:6px 10px;">☰</button>
+          <div>
+            <div class="page-heading">{{ page_title }}</div>
+          </div>
+        </div>
+        <div class="topbar-controls">
+          {% block topbar_filters %}{% endblock %}
+          <button id="theme-toggle-btn" class="btn btn-ghost" onclick="PlaceIQ.toggleTheme()">🌙 Dark Mode</button>
+        </div>
+      </header>
+
+      <!--<div class="synthetic-banner">
+        <span>ℹ {{ synthetic_notice }}</span>
+        <span class="mono" style="font-size:11px;">v1.0 · FastAPI + Scikit-Learn + Gemini</span>
+      </div> -->
+
+      <div class="content-wrap">
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+  </div>
+
+  <script src="/static/js/core.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

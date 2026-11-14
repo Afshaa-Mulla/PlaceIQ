@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block topbar_filters %}
+  <select id="ba-batch" onchange="loadBatchAnalytics()">
+    <option value="ALL">All Batches</option>
+    <option value="2023">2023</option>
+    <option value="2024">2024</option>
+    <option value="2025">2025</option>
+    <option value="2026">2026</option>
+  </select>
+  <select id="ba-branch" onchange="loadBatchAnalytics()">
+    <option value="ALL">All 7 Branches</option>
+    <option value="CSE">CSE</option>
+    <option value="IT">IT</option>
+    <option value="DS">DS</option>
+    <option value="ECE">ECE</option>
+    <option value="EE">EE</option>
+    <option value="MECH">MECH</option>
+    <option value="CIVIL">CIVIL</option>
+  </select>
+{% endblock %}
+
+{% block content %}
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Package Distribution by Branch (Violin & Box)</div>
+        <div class="panel-subtitle">CTC spread (LPA) across CSE, IT, DS, ECE, EE, MECH & CIVIL</div>
+      </div>
+    </div>
+    <div id="chart-violin-branch" class="chart-box"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Package Distribution by Readiness Tier</div>
+        <div class="panel-subtitle">How composite readiness shifts compensation bands</div>
+      </div>
+    </div>
+    <div id="chart-box-readiness" class="chart-box"></div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-header">
+    <div>
+      <div class="panel-title">Parallel Coordinates: Placed vs Unplaced Student Profiles</div>
+      <div class="panel-subtitle">Drag along any vertical axis to filter multi-dimensional student pathways</div>
+    </div>
+  </div>
+  <div id="chart-parcoords" class="chart-box-lg"></div>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">3D Talent Space: CGPA × Technical Index × Package (LPA)</div>
+        <div class="panel-subtitle">Interactive 3D scatter colored by placement status</div>
+      </div>
+    </div>
+    <div id="chart-3d" class="chart-box-lg"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Feature Correlation Matrix</div>
+        <div class="panel-subtitle">Pairwise Pearson correlations across academics, skills, and outcomes</div>
+      </div>
+    </div>
+    <div id="chart-corr" class="chart-box-lg"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let baCache = null;
+
+async function loadBatchAnalytics() {
+  const batch = document.getElementById('ba-batch').value;
+  const branch = document.getElementById('ba-branch').value;
+  const res = await fetch(`/api/batch-analytics?batch=${batch}&branch=${branch}`);
+  baCache = await res.json();
+  renderBatchAnalytics(baCache);
+}
+
+function renderBatchAnalytics(data) {
+  const pal = PlaceIQ.palette();
+
+  // 1. Violin by Branch
+  const vTraces = Object.entries(data.pkg_by_branch).map(([br, vals], i) => ({
+    type: 'violin',
+    y: vals,
+    name: br,
+    box: { visible: true },
+    meanline: { visible: true },
+    marker: { color: pal[i % pal.length] }
+  }));
+  Plotly.newPlot('chart-violin-branch', vTraces, PlaceIQ.plotlyLayout({ yaxis: { title: 'Package (LPA)' } }), PlaceIQ.plotlyConfig());
+
+  // 2. Box by Readiness
+  const bTraces = Object.entries(data.pkg_by_readiness).map(([rb, vals], i) => ({
+    type: 'box',
+    y: vals,
+    name: rb,
+    boxpoints: 'outliers',
+    marker: { color: pal[(i + 1) % pal.length] }
+  }));
+  Plotly.newPlot('chart-box-readiness', bTraces, PlaceIQ.plotlyLayout({ yaxis: { title: 'Package (LPA)' } }), PlaceIQ.plotlyConfig());
+
+  // 3. Parallel Coordinates
+  const rows = data.parallel_rows;
+  Plotly.newPlot('chart-parcoords', [{
+    type: 'parcoords',
+    line: {
+      color: rows.map(r => r.placed),
+      colorscale: [[0, pal[4]], [1, pal[1]]],
+      showscale: true,
+      colorbar: { title: 'Placed', tickvals: [0, 1], ticktext: ['No', 'Yes'] }
+    },
+    dimensions: [
+      { label: 'CGPA', range: [5, 10], values: rows.map(r => r.cgpa) },
+      { label: 'DSA', range: [15, 100], values: rows.map(r => r.dsa_score) },
+      { label: 'Python', range: [15, 100], values: rows.map(r => r.python_score) },
+      { label: 'SQL', range: [15, 100], values: rows.map(r => r.sql_score) },
+      { label: 'Comm.', range: [25, 100], values: rows.map(r => r.communication_score) },
+      { label: 'Readiness', range: [15, 100], values: rows.map(r => r.readiness_score) },
+      { label: 'CTC (LPA)', range: [0, 24], values: rows.map(r => r.package_lpa) },
+    ]
+  }], PlaceIQ.plotlyLayout({ margin: { t: 44, b: 24, l: 48, r: 48 } }), PlaceIQ.plotlyConfig());
+
+  // 4. 3D Scatter
+  const sc = data.scatter_rows;
+  const placedPts = sc.filter(r => r.placed === 1);
+  const unplacedPts = sc.filter(r => r.placed === 0);
+  Plotly.newPlot('chart-3d', [
+    {
+      type: 'scatter3d',
+      mode: 'markers',
+      name: 'Placed',
+      x: placedPts.map(r => r.cgpa),
+      y: placedPts.map(r => r.tech_index),
+      z: placedPts.map(r => r.package_lpa),
+      text: placedPts.map(r => `${r.name} (${r.branch}) - ${r.placed_company} ₹${r.package_lpa} LPA`),
+      marker: { size: 4.5, color: pal[1], opacity: 0.85 }
+    },
+    {
+      type: 'scatter3d',
+      mode: 'markers',
+      name: 'Unplaced',
+      x: unplacedPts.map(r => r.cgpa),
+      y: unplacedPts.map(r => r.tech_index),
+      z: unplacedPts.map(r => r.readiness_score * 0.05),
+      text: unplacedPts.map(r => `${r.name} (${r.branch}) - Readiness ${r.readiness_score}`),
+      marker: { size: 4, color: pal[4], opacity: 0.65 }
+    }
+  ], PlaceIQ.plotlyLayout({
+    margin: { t: 10, b: 10, l: 10, r: 10 },
+    scene: {
+      xaxis: { title: 'CGPA' },
+      yaxis: { title: 'Tech Index' },
+      zaxis: { title: 'Package (LPA)' }
+    }
+  }), PlaceIQ.plotlyConfig());
+
+  // 5. Correlation Heatmap
+  Plotly.newPlot('chart-corr', [{
+    type: 'heatmap',
+    z: data.correlation.matrix,
+    x: data.correlation.labels,
+    y: data.correlation.labels,
+    colorscale: 'RdBu',
+    zmid: 0,
+    text: data.correlation.matrix,
+    texttemplate: '%{text}',
+    textfont: { size: 9 }
+  }], PlaceIQ.plotlyLayout({ margin: { t: 20, b: 85, l: 85, r: 20 } }), PlaceIQ.plotlyConfig());
+}
+
+window.onThemeChanged = () => { if (baCache) renderBatchAnalytics(baCache); };
+loadBatchAnalytics();
+</script>
+{% endblock %}

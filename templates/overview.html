@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+{% block topbar_filters %}
+  <select id="filter-batch" onchange="loadOverview()">
+    <option value="ALL">All Batches (2023–2026)</option>
+    <option value="2023">Batch 2023</option>
+    <option value="2024">Batch 2024</option>
+    <option value="2025">Batch 2025</option>
+    <option value="2026">Batch 2026</option>
+  </select>
+  <select id="filter-branch" onchange="loadOverview()">
+    <option value="ALL">All 7 Branches</option>
+    <option value="CSE">CSE</option>
+    <option value="IT">IT</option>
+    <option value="DS">DS (Data Science)</option>
+    <option value="ECE">ECE</option>
+    <option value="EE">EE</option>
+    <option value="MECH">MECH</option>
+    <option value="CIVIL">CIVIL</option>
+  </select>
+{% endblock %}
+
+{% block content %}
+<div class="kpi-grid" id="kpi-cards"></div>
+
+<div class="panel">
+  <div class="panel-header">
+    <div>
+      <div class="panel-title">Ask PlaceIQ Cohort Intelligence (Natural Language Query)</div>
+      <div class="panel-subtitle">Query placement rates, branch performance, or package benchmarks in plain English</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-ghost" onclick="quickNLQ('Which branch has the highest placement rate and average package?')">Top Branch?</button>
+      <button class="btn btn-ghost" onclick="quickNLQ('Which branch has the lowest placement rate and needs intervention?')">Lowest Branch?</button>
+      <button class="btn btn-ghost" onclick="quickNLQ('How has placement rate trended from 2023 to 2026?')">Batch Trend?</button>
+    </div>
+  </div>
+  <div style="display:flex;gap:10px;">
+    <input type="text" id="nlq-input" placeholder="e.g., Compare CSE, DS, and MECH placement conversion and average CTC..." style="flex:1;" />
+    <button class="btn btn-primary" onclick="runNLQ()">Ask Gemini</button>
+  </div>
+  <div id="nlq-output" class="markdown-box" style="margin-top:12px;display:none;"></div>
+</div>
+
+<div class="panel">
+  <div class="panel-header">
+    <div>
+      <div class="panel-title">End-to-End Talent Flow: Branch → Readiness Band → Outcome → Package Tier</div>
+      <div class="panel-subtitle">Interactive multi-stage Sankey diagram across filtered student cohorts</div>
+    </div>
+  </div>
+  <div id="chart-sankey" class="chart-box-lg"></div>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Multi-Batch Placement & Package Trajectory</div>
+        <div class="panel-subtitle">Placement conversion (%) vs Average CTC (LPA) across graduation years</div>
+      </div>
+    </div>
+    <div id="chart-batch-trend" class="chart-box"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Recruitment Conversion Funnel</div>
+        <div class="panel-subtitle">Applications → Eligible Drives → Shortlists → Final Offers</div>
+      </div>
+    </div>
+    <div id="chart-funnel" class="chart-box"></div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Branch-Wise Placement Rate & Readiness</div>
+        <div class="panel-subtitle">Comparative benchmark across all 7 engineering disciplines</div>
+      </div>
+    </div>
+    <div id="chart-branch-bar" class="chart-box"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Recruiter Hierarchy Sunburst (Tier → Company → Role)</div>
+        <div class="panel-subtitle">Click segments to drill into hiring volume by industry tier</div>
+      </div>
+    </div>
+    <div id="chart-sunburst" class="chart-box"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let lastOverviewData = null;
+
+async function loadOverview() {
+  const batch = document.getElementById('filter-batch').value;
+  const branch = document.getElementById('filter-branch').value;
+  const res = await fetch(`/api/overview?batch=${batch}&branch=${branch}`);
+  const data = await res.json();
+  lastOverviewData = data;
+  renderOverview(data);
+}
+
+function renderOverview(data) {
+  const k = data.kpis;
+  const pal = PlaceIQ.palette();
+  document.getElementById('kpi-cards').innerHTML = `
+    <div class="kpi-card">
+      <div class="kpi-label">Cohort Size</div>
+      <div class="kpi-value">${k.total_students.toLocaleString()}</div>
+      <div class="kpi-sub"><span class="badge badge-blue">${k.placed_students} Placed</span></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Placement Conversion</div>
+      <div class="kpi-value">${k.placement_rate}%</div>
+      <div class="kpi-sub">Across ${k.companies_count} Recruiters · ${k.roles_count} Roles</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Average CTC (Placed)</div>
+      <div class="kpi-value">₹${k.avg_package_lpa} LPA</div>
+      <div class="kpi-sub">Median ₹${k.median_package_lpa} · Peak ₹${k.max_package_lpa} LPA</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Mean Readiness Index</div>
+      <div class="kpi-value">${k.avg_readiness}<span style="font-size:15px;font-weight:600;color:var(--text-muted)">/100</span></div>
+      <div class="kpi-sub"><span class="badge badge-green">${k.industry_ready_pct}% Industry Ready</span></div>
+    </div>
+  `;
+
+  // 1. Sankey
+  const dark = PlaceIQ.isDark();
+  Plotly.newPlot('chart-sankey', [{
+    type: 'sankey',
+    orientation: 'h',
+    node: {
+      pad: 16,
+      thickness: 18,
+      line: { color: dark ? '#1e293b' : '#cbd5e1', width: 0.8 },
+      label: data.sankey.nodes,
+      color: data.sankey.nodes.map((_, i) => pal[i % pal.length]),
+    },
+    link: {
+      source: data.sankey.links.map(l => l.source),
+      target: data.sankey.links.map(l => l.target),
+      value: data.sankey.links.map(l => l.value),
+      color: dark ? 'rgba(59,130,246,0.22)' : 'rgba(37,99,235,0.18)',
+    }
+  }], PlaceIQ.plotlyLayout({ margin: { t: 16, b: 16, l: 16, r: 16 } }), PlaceIQ.plotlyConfig());
+
+  // 2. Batch Trend Dual Axis
+  const bt = data.batch_trends;
+  Plotly.newPlot('chart-batch-trend', [
+    {
+      x: bt.map(d => 'Batch ' + d.batch),
+      y: bt.map(d => d.placement_rate),
+      name: 'Placement Rate (%)',
+      type: 'bar',
+      marker: { color: pal[0], borderRadius: 6 },
+    },
+    {
+      x: bt.map(d => 'Batch ' + d.batch),
+      y: bt.map(d => d.avg_package),
+      name: 'Avg Package (LPA)',
+      type: 'scatter',
+      mode: 'lines+markers',
+      yaxis: 'y2',
+      line: { color: pal[1], width: 3 },
+      marker: { size: 9 },
+    }
+  ], PlaceIQ.plotlyLayout({
+    yaxis: { title: 'Placement Rate (%)' },
+    yaxis2: { title: 'Avg CTC (LPA)', overlaying: 'y', side: 'right', showgrid: false }
+  }), PlaceIQ.plotlyConfig());
+
+  // 3. Funnel
+  Plotly.newPlot('chart-funnel', [{
+    type: 'funnel',
+    y: data.funnel.map(f => f.stage),
+    x: data.funnel.map(f => f.count),
+    textinfo: 'value+percent initial',
+    marker: { color: [pal[0], pal[5], pal[1], pal[6]] }
+  }], PlaceIQ.plotlyLayout({ margin: { t: 20, b: 20, l: 150, r: 20 } }), PlaceIQ.plotlyConfig());
+
+  // 4. Branch Comparison
+  const bs = data.branch_summary;
+  Plotly.newPlot('chart-branch-bar', [
+    {
+      x: bs.map(b => b.branch),
+      y: bs.map(b => b.placement_rate),
+      name: 'Placement Rate (%)',
+      type: 'bar',
+      marker: { color: pal[0] }
+    },
+    {
+      x: bs.map(b => b.branch),
+      y: bs.map(b => b.avg_readiness),
+      name: 'Readiness Score',
+      type: 'bar',
+      marker: { color: pal[1] }
+    }
+  ], PlaceIQ.plotlyLayout({ barmode: 'group' }), PlaceIQ.plotlyConfig());
+
+  // 5. Sunburst
+  const ids = ['All Hires'];
+  const labels = ['All Hires'];
+  const parents = [''];
+  const values = [0];
+  const tierSet = new Set();
+  const compSet = new Set();
+
+  data.sunburst.forEach(item => {
+    const tId = 'T:' + item.tier;
+    const cId = 'C:' + item.company;
+    const rId = 'R:' + item.company + ':' + item.role;
+    if (!tierSet.has(tId)) {
+      tierSet.add(tId);
+      ids.push(tId); labels.push(item.tier); parents.push('All Hires'); values.push(0);
+    }
+    if (!compSet.has(cId)) {
+      compSet.add(cId);
+      ids.push(cId); labels.push(item.company); parents.push(tId); values.push(0);
+    }
+    ids.push(rId); labels.push(item.role); parents.push(cId); values.push(item.hires);
+  });
+
+  Plotly.newPlot('chart-sunburst', [{
+    type: 'sunburst',
+    ids, labels, parents, values,
+    maxdepth: 3,
+    insidetextorientation: 'radial',
+    marker: { colors: pal }
+  }], PlaceIQ.plotlyLayout({ margin: { t: 10, b: 10, l: 10, r: 10 } }), PlaceIQ.plotlyConfig());
+}
+
+function quickNLQ(q) {
+  document.getElementById('nlq-input').value = q;
+  runNLQ();
+}
+
+async function runNLQ() {
+  const q = document.getElementById('nlq-input').value.trim();
+  if (!q) return;
+  const out = document.getElementById('nlq-output');
+  out.style.display = 'block';
+  out.textContent = 'Analyzing cohort metrics with Gemini...';
+  const res = await fetch('/api/ai/nlq', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question: q })
+  });
+  const data = await res.json();
+  out.textContent = data.answer;
+}
+
+window.onThemeChanged = () => { if (lastOverviewData) renderOverview(lastOverviewData); };
+loadOverview();
+</script>
+{% endblock %}

@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block topbar_filters %}
+  <input type="text" id="m-student-id" value="{{ default_student_id }}" style="width:120px;" />
+  <select id="m-tier" onchange="loadMatcher()">
+    <option value="ALL">All Recruiter Tiers</option>
+    <option value="Product / FAANG-Tier">Product / FAANG-Tier</option>
+    <option value="FinTech & Analytics">FinTech & Analytics</option>
+    <option value="Core Engineering & R&D">Core Engineering & R&D</option>
+    <option value="IT Consulting & Enterprise">IT Consulting & Enterprise</option>
+  </select>
+  <button class="btn btn-primary" onclick="loadMatcher()">Match Roles</button>
+{% endblock %}
+
+{% block content %}
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title" id="m-student-title">Student-to-Role Compatibility Ranking</div>
+        <div class="panel-subtitle">Cosine skill vector match + academic eligibility check across 90 roles</div>
+      </div>
+    </div>
+    <div class="table-wrap" style="max-height:520px;overflow-y:auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Company & Tier</th>
+            <th>Role</th>
+            <th>Fit Score</th>
+            <th>Skill Match</th>
+            <th>Package</th>
+            <th>Top Skill Gap</th>
+            <th>Gate</th>
+          </tr>
+        </thead>
+        <tbody id="m-roles-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Placement Officer Drive Shortlist Generator</div>
+        <div class="panel-subtitle">Select a recruiting company to rank eligible campus candidates</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <select id="m-company-select" onchange="loadMatcher()"></select>
+        <a id="m-company-excel" href="/api/reports/export?report_type=company" class="btn btn-secondary">⬇ Excel</a>
+      </div>
+    </div>
+    <div id="m-company-meta" style="margin-bottom:12px;font-size:13px;color:var(--text-secondary);"></div>
+    <div class="table-wrap" style="max-height:450px;overflow-y:auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Student</th>
+            <th>Branch</th>
+            <th>CGPA</th>
+            <th>Readiness</th>
+            <th>Drive Score</th>
+          </tr>
+        </thead>
+        <tbody id="m-shortlist-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let companiesLoaded = false;
+
+async function loadMatcher() {
+  const sid = document.getElementById('m-student-id').value.trim().toUpperCase() || 'STU0001';
+  const tier = document.getElementById('m-tier').value;
+  const compSel = document.getElementById('m-company-select');
+  const cid = compSel.value || '';
+
+  const res = await fetch(`/api/matcher?student_id=${sid}&company_id=${cid}&tier=${encodeURIComponent(tier)}`);
+  const data = await res.json();
+
+  if (!companiesLoaded) {
+    compSel.innerHTML = data.companies.map(c => `<option value="${c.company_id}">${c.company_name} (${c.tier})</option>`).join('');
+    companiesLoaded = true;
+  }
+  const activeCid = compSel.value;
+  document.getElementById('m-company-excel').href = `/api/reports/export?report_type=company&company_id=${activeCid}`;
+
+  const s = data.student;
+  document.getElementById('m-student-title').textContent = `Role Matches for ${s.name} (${s.student_id} · ${s.branch} · CGPA ${s.cgpa})`;
+
+  document.getElementById('m-roles-tbody').innerHTML = (data.role_matches || []).map(m => {
+    const topGap = (m.skill_gaps && m.skill_gaps.length > 0) ? m.skill_gaps.find(g => g.gap > 0) : null;
+    const gapText = topGap ? `${topGap.label} (-${topGap.gap})` : 'None';
+    return `
+      <tr>
+        <td><strong>${m.company_name}</strong><br><span style="font-size:11px;color:var(--text-muted)">${m.tier}</span></td>
+        <td>${m.role_title}</td>
+        <td class="mono"><strong>${m.fit_score}%</strong></td>
+        <td class="mono">${m.skill_similarity || m.fit_score}%</td>
+        <td class="mono">₹${m.package_lpa} LPA</td>
+        <td>${gapText}</td>
+        <td>${m.eligible ? '<span class="badge badge-green">Eligible</span>' : '<span class="badge badge-rose">Ineligible</span>'}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const c = data.selected_company;
+  document.getElementById('m-company-meta').innerHTML = `
+    Eligibility Policy: <strong>Min CGPA ${c.min_cgpa}</strong> · <strong>Max Backlogs ${c.max_backlogs}</strong> · Preferred Branches: <span class="badge badge-blue">${c.preferred_branches}</span>
+  `;
+
+  document.getElementById('m-shortlist-tbody').innerHTML = (data.eligible_shortlist || []).map((st, idx) => `
+    <tr>
+      <td class="mono">#${idx + 1}</td>
+      <td><a href="/student-360?id=${st.student_id}" style="color:var(--accent-primary);font-weight:600;text-decoration:none;">${st.name}</a> <span class="mono" style="font-size:11px;">(${st.student_id})</span></td>
+      <td><span class="badge badge-blue">${st.branch}</span></td>
+      <td class="mono">${st.cgpa.toFixed(2)}</td>
+      <td class="mono">${st.readiness_score}</td>
+      <td class="mono"><strong>${st.drive_rank_score}</strong></td>
+    </tr>
+  `).join('');
+}
+
+loadMatcher();
+</script>
+{% endblock %}

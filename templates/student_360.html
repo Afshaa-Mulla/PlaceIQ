@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block topbar_filters %}
+  <input type="text" id="s360-id" value="{{ default_student_id }}" placeholder="e.g., STU0001" style="width:130px;" />
+  <button class="btn btn-primary" onclick="loadStudent360()">Load Student</button>
+  <button class="btn btn-ghost" onclick="randomStudent()">🎲 Random</button>
+{% endblock %}
+
+{% block content %}
+<div class="kpi-grid" id="s360-header-cards"></div>
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Composite Readiness Gauge</div>
+        <div class="panel-subtitle">Weighted index across CGPA, technical skills, soft skills & experience</div>
+      </div>
+    </div>
+    <div id="chart-gauge" class="chart-box"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">10-Skill Competency Radar vs Branch Peer Benchmark</div>
+        <div class="panel-subtitle">Student profile overlaid against branch cohort average</div>
+      </div>
+    </div>
+    <div id="chart-radar" class="chart-box"></div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">ML Prediction Drivers (Local Feature Attribution)</div>
+        <div class="panel-subtitle">Positive vs negative contributors to placement probability</div>
+      </div>
+    </div>
+    <div id="chart-s360-drivers" class="chart-box"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Top Recommended Companies & Roles</div>
+        <div class="panel-subtitle">Ranked by skill cosine similarity, CGPA eligibility & readiness</div>
+      </div>
+    </div>
+    <div class="table-wrap" style="max-height:360px;overflow-y:auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Company</th>
+            <th>Role</th>
+            <th>Fit Score</th>
+            <th>CTC</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="s360-matches-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let s360Cache = null;
+
+function randomStudent() {
+  const num = Math.floor(Math.random() * 1200) + 1;
+  document.getElementById('s360-id').value = 'STU' + String(num).padStart(4, '0');
+  loadStudent360();
+}
+
+async function loadStudent360() {
+  const sid = document.getElementById('s360-id').value.trim().toUpperCase() || 'STU0001';
+  const res = await fetch(`/api/students/${sid}`);
+  s360Cache = await res.json();
+  renderStudent360(s360Cache);
+}
+
+function renderStudent360(data) {
+  const s = data.student;
+  const p = data.prediction;
+  const pal = PlaceIQ.palette();
+
+  document.getElementById('s360-header-cards').innerHTML = `
+    <div class="kpi-card">
+      <div class="kpi-label">${s.student_id} · Batch ${s.batch}</div>
+      <div class="kpi-value" style="font-size:22px;">${s.name}</div>
+      <div class="kpi-sub"><span class="badge badge-blue">${s.branch}</span> CGPA ${s.cgpa} · Backlogs ${s.backlogs}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Predicted Placement Prob.</div>
+      <div class="kpi-value">${p.placement_probability}%</div>
+      <div class="kpi-sub">${PlaceIQ.readinessBadge(p.readiness_band)}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Expected Package Band</div>
+      <div class="kpi-value">₹${p.expected_lpa} LPA</div>
+      <div class="kpi-sub">Predicted Tier: ${p.predicted_package_band}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Actual Cohort Outcome</div>
+      <div class="kpi-value" style="font-size:21px;">${s.placed ? s.placed_company : 'Seeking Offer'}</div>
+      <div class="kpi-sub">${s.placed ? `${s.placed_role} · ₹${s.package_lpa} LPA` : `${s.internships_count} Internships · ${s.projects_count} Projects`}</div>
+    </div>
+  `;
+
+  // 1. Gauge Chart
+  Plotly.newPlot('chart-gauge', [{
+    type: 'indicator',
+    mode: 'gauge+number+delta',
+    value: p.readiness_score,
+    delta: { reference: 68, increasing: { color: pal[1] } },
+    title: { text: p.readiness_band, font: { size: 15 } },
+    gauge: {
+      axis: { range: [0, 100] },
+      bar: { color: pal[0] },
+      steps: [
+        { range: [0, 52], color: 'rgba(225, 29, 72, 0.16)' },
+        { range: [52, 72], color: 'rgba(217, 119, 6, 0.16)' },
+        { range: [72, 100], color: 'rgba(13, 148, 136, 0.20)' },
+      ],
+      threshold: { line: { color: pal[1], width: 3 }, thickness: 0.8, value: 72 }
+    }
+  }], PlaceIQ.plotlyLayout({ margin: { t: 44, b: 16, l: 24, r: 24 } }), PlaceIQ.plotlyConfig());
+
+  // 2. Radar Chart
+  const keys = Object.keys(data.skill_labels);
+  const labels = keys.map(k => data.skill_labels[k]);
+  const stuVals = keys.map(k => s[k]);
+  const peerVals = keys.map(k => data.peer_avg[k]);
+
+  Plotly.newPlot('chart-radar', [
+    {
+      type: 'scatterpolar',
+      r: [...stuVals, stuVals[0]],
+      theta: [...labels, labels[0]],
+      fill: 'toself',
+      name: s.name,
+      line: { color: pal[0] }
+    },
+    {
+      type: 'scatterpolar',
+      r: [...peerVals, peerVals[0]],
+      theta: [...labels, labels[0]],
+      fill: 'toself',
+      name: s.branch + ' Peer Avg',
+      line: { color: pal[1] }
+    }
+  ], PlaceIQ.plotlyLayout({
+    polar: { radialaxis: { visible: true, range: [0, 100] } },
+    margin: { t: 28, b: 36, l: 48, r: 48 }
+  }), PlaceIQ.plotlyConfig());
+
+  // 3. Drivers Horizontal Bar (Using contributions from backend)
+  const drv = (p.contributions || []).slice().reverse();
+  Plotly.newPlot('chart-s360-drivers', [{
+    type: 'bar',
+    orientation: 'h',
+    y: drv.map(d => d.label),
+    x: drv.map(d => d.impact_pp),
+    marker: { color: drv.map(d => d.impact_pp >= 0 ? pal[1] : pal[4]) }
+  }], PlaceIQ.plotlyLayout({ margin: { t: 16, b: 36, l: 150, r: 20 }, xaxis: { title: 'Relative Impact Score' } }), PlaceIQ.plotlyConfig());
+
+  // 4. Role Matches Table
+  document.getElementById('s360-matches-tbody').innerHTML = (data.role_matches || []).map(m => `
+    <tr>
+      <td><strong>${m.company_name}</strong><br><span style="font-size:11px;color:var(--text-muted)">${m.tier}</span></td>
+      <td>${m.role_title}</td>
+      <td class="mono"><strong>${m.fit_score}%</strong></td>
+      <td class="mono">₹${m.package_lpa} LPA</td>
+      <td>${m.eligible ? '<span class="badge badge-green">Eligible</span>' : '<span class="badge badge-amber">CGPA/Backlog Gate</span>'}</td>
+    </tr>
+  `).join('');
+}
+
+window.onThemeChanged = () => { if (s360Cache) renderStudent360(s360Cache); };
+loadStudent360();
+</script>
+{% endblock %}

@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block topbar_filters %}
+  <a id="excel-export-link" href="/api/reports/export?report_type=student" class="btn btn-secondary">⬇ Export Filtered Excel</a>
+{% endblock %}
+
+{% block content %}
+<div class="panel">
+  <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;gap:10px;margin-bottom:16px;">
+    <input type="text" id="ex-search" placeholder="Search ID, name, company, or role..." oninput="resetAndLoad()" />
+    <select id="ex-batch" onchange="resetAndLoad()">
+      <option value="ALL">All Batches</option>
+      <option value="2023">Batch 2023</option>
+      <option value="2024">Batch 2024</option>
+      <option value="2025">Batch 2025</option>
+      <option value="2026">Batch 2026</option>
+    </select>
+    <select id="ex-branch" onchange="resetAndLoad()">
+      <option value="ALL">All 7 Branches</option>
+      <option value="CSE">CSE</option>
+      <option value="IT">IT</option>
+      <option value="DS">DS</option>
+      <option value="ECE">ECE</option>
+      <option value="EE">EE</option>
+      <option value="MECH">MECH</option>
+      <option value="CIVIL">CIVIL</option>
+    </select>
+    <select id="ex-readiness" onchange="resetAndLoad()">
+      <option value="ALL">All Readiness Tiers</option>
+      <option value="Industry Ready">Industry Ready</option>
+      <option value="Developing">Developing</option>
+      <option value="Needs Upskilling">Needs Upskilling</option>
+    </select>
+    <select id="ex-sort" onchange="resetAndLoad()">
+      <option value="readiness_score:desc">Sort: Readiness (High→Low)</option>
+      <option value="cgpa:desc">Sort: CGPA (High→Low)</option>
+      <option value="package_lpa:desc">Sort: Package (High→Low)</option>
+      <option value="coding_rating:desc">Sort: Coding Rating</option>
+      <option value="student_id:asc">Sort: Student ID</option>
+    </select>
+  </div>
+
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Student ID</th>
+          <th>Name</th>
+          <th>Batch</th>
+          <th>Branch</th>
+          <th>CGPA</th>
+          <th>Backlogs</th>
+          <th>Tech / Soft</th>
+          <th>Readiness</th>
+          <th>Status</th>
+          <th>Company & Role</th>
+          <th>CTC</th>
+          <th>360° Profile</th>
+        </tr>
+      </thead>
+      <tbody id="explorer-tbody"></tbody>
+    </table>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;flex-wrap:wrap;gap:10px;">
+    <div id="ex-info" style="font-size:13px;color:var(--text-muted);"></div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-ghost" onclick="changePage(-1)">← Previous</button>
+      <button class="btn btn-ghost" onclick="changePage(1)">Next →</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentPage = 1;
+let totalPages = 1;
+
+function resetAndLoad() {
+  currentPage = 1;
+  loadStudents();
+}
+
+function changePage(delta) {
+  const next = currentPage + delta;
+  if (next >= 1 && next <= totalPages) {
+    currentPage = next;
+    loadStudents();
+  }
+}
+
+async function loadStudents() {
+  const search = document.getElementById('ex-search').value;
+  const batch = document.getElementById('ex-batch').value;
+  const branch = document.getElementById('ex-branch').value;
+  const readiness = document.getElementById('ex-readiness').value;
+  const [sort_by, sort_dir] = document.getElementById('ex-sort').value.split(':');
+
+  document.getElementById('excel-export-link').href = `/api/reports/export?report_type=student&batch=${batch}&branch=${branch}`;
+
+  const url = `/api/students?batch=${batch}&branch=${branch}&readiness=${encodeURIComponent(readiness)}&search=${encodeURIComponent(search)}&sort_by=${sort_by}&sort_dir=${sort_dir}&page=${currentPage}&page_size=20`;
+  const res = await fetch(url);
+  const data = await res.json();
+  totalPages = data.pages;
+
+  document.getElementById('ex-info').textContent = `Showing page ${data.page} of ${data.pages} (${data.total} matching students)`;
+  document.getElementById('explorer-tbody').innerHTML = data.items.map(s => `
+    <tr>
+      <td class="mono" style="font-weight:600;">${s.student_id}</td>
+      <td style="font-weight:600;">${s.name}</td>
+      <td>${s.batch}</td>
+      <td><span class="badge badge-blue">${s.branch}</span></td>
+      <td class="mono">${s.cgpa.toFixed(2)}</td>
+      <td class="mono">${s.backlogs}</td>
+      <td class="mono">${s.tech_index} / ${s.soft_index}</td>
+      <td><strong>${s.readiness_score}</strong> ${PlaceIQ.readinessBadge(s.readiness_band)}</td>
+      <td>${s.placed ? '<span class="badge badge-green">Placed</span>' : '<span class="badge badge-rose">Seeking</span>'}</td>
+      <td>${s.placed ? `<strong>${s.placed_company}</strong> · ${s.placed_role}` : '<span style="color:var(--text-muted)">—</span>'}</td>
+      <td class="mono">${s.placed ? '₹' + s.package_lpa + ' LPA' : '—'}</td>
+      <td><a href="/student-360?id=${s.student_id}" class="btn btn-ghost" style="padding:5px 10px;font-size:12px;">Inspect →</a></td>
+    </tr>
+  `).join('');
+}
+
+loadStudents();
+</script>
+{% endblock %}

@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="grid-3">
+  <div class="panel">
+    <div class="panel-title" style="margin-bottom:6px;">1. Student Readiness & Offer Roster</div>
+    <div class="panel-subtitle" style="margin-bottom:14px;">Multi-sheet Excel workbook containing Executive KPIs, full student cohort records, ML readiness bands, and placement outcomes.</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <select id="rep-stu-batch" style="flex:1;">
+        <option value="ALL">All Batches</option>
+        <option value="2023">2023</option>
+        <option value="2024">2024</option>
+        <option value="2025">2025</option>
+        <option value="2026">2026</option>
+      </select>
+      <select id="rep-stu-branch" style="flex:1;">
+        <option value="ALL">All Branches</option>
+        <option value="CSE">CSE</option>
+        <option value="IT">IT</option>
+        <option value="DS">DS</option>
+        <option value="ECE">ECE</option>
+        <option value="EE">EE</option>
+        <option value="MECH">MECH</option>
+        <option value="CIVIL">CIVIL</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" style="width:100%;" onclick="downloadStudentExcel()">⬇ Download Student Roster (.xlsx)</button>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title" style="margin-bottom:6px;">2. Department & Batch Summary</div>
+    <div class="panel-subtitle" style="margin-bottom:14px;">Accreditation-ready branch-by-branch and graduation-year conversion statistics, average/median CTC, and readiness breakdown.</div>
+    <div style="height:46px;"></div>
+    <a href="/api/reports/export?report_type=batch" class="btn btn-secondary" style="width:100%;">⬇ Download Batch Summary (.xlsx)</a>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title" style="margin-bottom:6px;">3. Recruiter Drive Shortlist</div>
+    <div class="panel-subtitle" style="margin-bottom:14px;">Eligible candidate roster filtered by company CGPA & backlog criteria and ranked by composite Drive Rank Score.</div>
+    <div style="margin-bottom:12px;">
+      <select id="rep-comp-id" style="width:100%;"></select>
+    </div>
+    <button class="btn btn-primary" style="width:100%;" onclick="downloadCompanyExcel()">⬇ Download Drive Shortlist (.xlsx)</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function initReports() {
+  const res = await fetch('/api/matcher');
+  const data = await res.json();
+  document.getElementById('rep-comp-id').innerHTML = data.companies.map(c =>
+    `<option value="${c.company_id}">${c.company_name} (${c.tier} · Min CGPA ${c.min_cgpa})</option>`
+  ).join('');
+}
+
+function downloadStudentExcel() {
+  const b = document.getElementById('rep-stu-batch').value;
+  const br = document.getElementById('rep-stu-branch').value;
+  window.location.href = `/api/reports/export?report_type=student&batch=${b}&branch=${br}`;
+}
+
+function downloadCompanyExcel() {
+  const cid = document.getElementById('rep-comp-id').value;
+  window.location.href = `/api/reports/export?report_type=company&company_id=${cid}`;
+}
+
+initReports();
+</script>
+{% endblock %}

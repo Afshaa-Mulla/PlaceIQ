@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block topbar_filters %}
+  <select id="sg-batch" onchange="loadSkillGaps()">
+    <option value="ALL">All Batches</option>
+    <option value="2023">2023</option>
+    <option value="2024">2024</option>
+    <option value="2025">2025</option>
+    <option value="2026">2026</option>
+  </select>
+  <select id="sg-branch" onchange="loadSkillGaps()">
+    <option value="ALL">All 7 Branches</option>
+    <option value="CSE">CSE</option>
+    <option value="IT">IT</option>
+    <option value="DS">DS</option>
+    <option value="ECE">ECE</option>
+    <option value="EE">EE</option>
+    <option value="MECH">MECH</option>
+    <option value="CIVIL">CIVIL</option>
+  </select>
+  <input type="text" id="sg-student" value="{{ default_student_id }}" style="width:115px;" />
+  <button class="btn btn-primary" onclick="loadSkillGaps()">Analyze Gaps</button>
+{% endblock %}
+
+{% block content %}
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Cohort Skill Supply vs Industry Benchmark</div>
+        <div class="panel-subtitle">Dumbbell gap comparison across all 10 technical & behavioral competencies</div>
+      </div>
+    </div>
+    <div id="chart-dumbbell" class="chart-box-lg"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Curriculum Intervention Priority Table</div>
+        <div class="panel-subtitle">Recommended training bootcamps ranked by average competency deficit</div>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Competency</th>
+            <th>Cohort Avg</th>
+            <th>Industry Target</th>
+            <th>Deficit</th>
+            <th>Priority</th>
+          </tr>
+        </thead>
+        <tbody id="sg-priority-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-header">
+    <div>
+      <div class="panel-title">Recruiter Skill Demand Matrix (Top 18 Companies × 10 Skills)</div>
+      <div class="panel-subtitle">Minimum threshold scores expected across major campus recruiters</div>
+    </div>
+  </div>
+  <div id="chart-skill-heatmap" class="chart-box-lg"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let sgCache = null;
+
+async function loadSkillGaps() {
+  const batchEl = document.getElementById('sg-batch');
+  const branchEl = document.getElementById('sg-branch');
+  const sidEl = document.getElementById('sg-student');
+
+  const batch = batchEl ? batchEl.value : 'ALL';
+  const branch = branchEl ? branchEl.value : 'ALL';
+  const sid = sidEl ? sidEl.value.trim().toUpperCase() : 'STU0001';
+
+  const res = await fetch(`/api/skill-gaps?batch=${batch}&branch=${branch}&student_id=${sid}`);
+  sgCache = await res.json();
+  renderSkillGaps(sgCache);
+}
+
+function renderSkillGaps(data) {
+  if (!data || !data.batch_skill_gaps) return;
+  const pal = PlaceIQ.palette();
+  const gaps = (data.batch_skill_gaps || []).slice().reverse();
+
+  // Dumbbell Chart
+  const lines = gaps.map(g => ({
+    type: 'scatter',
+    mode: 'lines',
+    x: [g.cohort_avg, g.industry_benchmark],
+    y: [g.label, g.label],
+    line: { color: '#94a3b8', width: 2.5 },
+    showlegend: false,
+    hoverinfo: 'none'
+  }));
+
+  const cohortTrace = {
+    type: 'scatter',
+    mode: 'markers',
+    name: 'Cohort Average',
+    x: gaps.map(g => g.cohort_avg),
+    y: gaps.map(g => g.label),
+    marker: { color: pal[0], size: 11 }
+  };
+
+  const benchTrace = {
+    type: 'scatter',
+    mode: 'markers',
+    name: 'Industry Benchmark',
+    x: gaps.map(g => g.industry_benchmark),
+    y: gaps.map(g => g.label),
+    marker: { color: pal[1], size: 11, symbol: 'diamond' }
+  };
+
+  Plotly.newPlot('chart-dumbbell', [...lines, cohortTrace, benchTrace], PlaceIQ.plotlyLayout({
+    margin: { t: 20, b: 40, l: 130, r: 24 },
+    xaxis: { title: 'Score (0–100)', range: [35, 95] }
+  }), PlaceIQ.plotlyConfig());
+
+  // Priority Table
+  const tbody = document.getElementById('sg-priority-tbody');
+  if (tbody) {
+    tbody.innerHTML = (data.batch_skill_gaps || []).map(g => {
+      const badge = g.priority === 'Critical' ? 'badge-rose' : (g.priority === 'Moderate' ? 'badge-amber' : 'badge-green');
+      return `
+        <tr>
+          <td><strong>${g.label}</strong></td>
+          <td class="mono">${g.cohort_avg}</td>
+          <td class="mono">${g.industry_benchmark}</td>
+          <td class="mono">-${g.gap}</td>
+          <td><span class="badge ${badge}">${g.priority}</span></td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  // Company x Skill Heatmap
+  if (data.heatmap && data.heatmap.matrix) {
+    Plotly.newPlot('chart-skill-heatmap', [{
+      type: 'heatmap',
+      z: data.heatmap.matrix,
+      x: data.heatmap.skills,
+      y: data.heatmap.companies,
+      colorscale: 'YlGnBu',
+      text: data.heatmap.matrix,
+      texttemplate: '%{text}',
+      textfont: { size: 10 }
+    }], PlaceIQ.plotlyLayout({ margin: { t: 20, b: 80, l: 150, r: 24 } }), PlaceIQ.plotlyConfig());
+  }
+}
+
+window.onThemeChanged = () => { if (sgCache) renderSkillGaps(sgCache); };
+loadSkillGaps();
+</script>
+{% endblock %}

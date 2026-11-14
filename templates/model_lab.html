@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="kpi-grid" id="ml-kpis"></div>
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">ROC Curves — Placement Classifier Benchmark</div>
+        <div class="panel-subtitle">Holdout test evaluation comparing Logistic Regression, Random Forest & Gradient Boosting</div>
+      </div>
+    </div>
+    <div id="chart-roc" class="chart-box"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Precision-Recall Curves</div>
+        <div class="panel-subtitle">Trade-off between precision and recall on unseen student cohort</div>
+      </div>
+    </div>
+    <div id="chart-pr" class="chart-box"></div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Global Feature Importance (Top 14 Predictors)</div>
+        <div class="panel-subtitle">Tree-based Gini/gain importance driving placement classification</div>
+      </div>
+    </div>
+    <div id="chart-fi" class="chart-box"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Champion Classifier Confusion Matrix & Calibration</div>
+        <div class="panel-subtitle">Actual vs Predicted placement outcomes on test split</div>
+      </div>
+    </div>
+    <div id="chart-cm" class="chart-box"></div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-header">
+    <div>
+      <div class="panel-title">Model Benchmark Leaderboard (Classification & CTC Regression)</div>
+    </div>
+  </div>
+  <div class="grid-2" style="margin-bottom:0;">
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Classifier</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1</th><th>ROC-AUC</th></tr></thead>
+        <tbody id="ml-clf-table"></tbody>
+      </table>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Package Regressor</th><th>MAE (LPA)</th><th>RMSE (LPA)</th><th>R² Score</th></tr></thead>
+        <tbody id="ml-reg-table"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let mlCache = null;
+
+async function loadModelLab() {
+  const res = await fetch('/api/model-lab');
+  mlCache = await res.json();
+  renderModelLab(mlCache);
+}
+
+function renderModelLab(data) {
+  const pal = PlaceIQ.palette();
+  const champClf = data.classification.find(m => m.model === data.champion_classifier);
+  const champReg = data.regression.find(m => m.model === data.champion_regressor);
+
+  document.getElementById('ml-kpis').innerHTML = `
+    <div class="kpi-card">
+      <div class="kpi-label">Champion Classifier</div>
+      <div class="kpi-value" style="font-size:20px;">${data.champion_classifier}</div>
+      <div class="kpi-sub"><span class="badge badge-green">ROC-AUC ${champClf.roc_auc}</span></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Holdout Accuracy & F1</div>
+      <div class="kpi-value">${(champClf.accuracy * 100).toFixed(1)}%</div>
+      <div class="kpi-sub">F1 Score: ${champClf.f1_score}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Champion CTC Regressor</div>
+      <div class="kpi-value" style="font-size:20px;">${data.champion_regressor}</div>
+      <div class="kpi-sub"><span class="badge badge-blue">R² = ${champReg.r2}</span></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Package Prediction Error</div>
+      <div class="kpi-value">±₹${champReg.mae_lpa} LPA</div>
+      <div class="kpi-sub">RMSE: ₹${champReg.rmse_lpa} LPA</div>
+    </div>
+  `;
+
+  // ROC
+  const rocTraces = data.classification.map((m, i) => ({
+    type: 'scatter',
+    mode: 'lines',
+    name: `${m.model} (AUC=${m.roc_auc})`,
+    x: m.roc_curve.fpr,
+    y: m.roc_curve.tpr,
+    line: { color: pal[i % pal.length], width: 2.8 }
+  }));
+  rocTraces.push({
+    type: 'scatter', mode: 'lines', name: 'Random Baseline',
+    x: [0, 1], y: [0, 1], line: { dash: 'dash', color: '#94a3b8', width: 1.5 }
+  });
+  Plotly.newPlot('chart-roc', rocTraces, PlaceIQ.plotlyLayout({
+    xaxis: { title: 'False Positive Rate' },
+    yaxis: { title: 'True Positive Rate' }
+  }), PlaceIQ.plotlyConfig());
+
+  // PR Curve
+  const prTraces = data.classification.map((m, i) => ({
+    type: 'scatter',
+    mode: 'lines',
+    name: `${m.model} (AP=${m.pr_auc})`,
+    x: m.pr_curve.recall,
+    y: m.pr_curve.precision,
+    line: { color: pal[i % pal.length], width: 2.8 }
+  }));
+  Plotly.newPlot('chart-pr', prTraces, PlaceIQ.plotlyLayout({
+    xaxis: { title: 'Recall' },
+    yaxis: { title: 'Precision' }
+  }), PlaceIQ.plotlyConfig());
+
+  // Feature Importance
+  const fi = data.feature_importance.slice(0, 14).reverse();
+  Plotly.newPlot('chart-fi', [{
+    type: 'bar',
+    orientation: 'h',
+    y: fi.map(f => f.feature),
+    x: fi.map(f => f.importance),
+    marker: { color: pal[0] }
+  }], PlaceIQ.plotlyLayout({ margin: { t: 16, b: 36, l: 155, r: 20 }, xaxis: { title: 'Importance Weight' } }), PlaceIQ.plotlyConfig());
+
+  // Confusion Matrix
+  const cm = champClf.confusion_matrix;
+  Plotly.newPlot('chart-cm', [{
+    type: 'heatmap',
+    z: cm,
+    x: ['Pred: Unplaced', 'Pred: Placed'],
+    y: ['Actual: Unplaced', 'Actual: Placed'],
+    colorscale: 'Blues',
+    text: cm,
+    texttemplate: '<b>%{text}</b>',
+    textfont: { size: 18 }
+  }], PlaceIQ.plotlyLayout({ margin: { t: 20, b: 50, l: 120, r: 30 } }), PlaceIQ.plotlyConfig());
+
+  // Tables
+  document.getElementById('ml-clf-table').innerHTML = data.classification.map(m => `
+    <tr>
+      <td><strong>${m.model}</strong></td>
+      <td class="mono">${(m.accuracy * 100).toFixed(1)}%</td>
+      <td class="mono">${m.precision}</td>
+      <td class="mono">${m.recall}</td>
+      <td class="mono">${m.f1_score}</td>
+      <td class="mono"><strong>${m.roc_auc}</strong></td>
+    </tr>
+  `).join('');
+
+  document.getElementById('ml-reg-table').innerHTML = data.regression.map(r => `
+    <tr>
+      <td><strong>${r.model}</strong></td>
+      <td class="mono">₹${r.mae_lpa}</td>
+      <td class="mono">₹${r.rmse_lpa}</td>
+      <td class="mono"><strong>${r.r2}</strong></td>
+    </tr>
+  `).join('');
+}
+
+window.onThemeChanged = () => { if (mlCache) renderModelLab(mlCache); };
+loadModelLab();
+</script>
+{% endblock %}

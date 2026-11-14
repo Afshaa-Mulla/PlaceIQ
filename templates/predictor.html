@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Interactive Student Profile Controls</div>
+        <div class="panel-subtitle">Adjust sliders to simulate real-time ML placement probability & expected CTC</div>
+      </div>
+      <select id="sim-branch" onchange="runSimulation()">
+        <option value="CSE">CSE</option>
+        <option value="IT">IT</option>
+        <option value="DS">DS</option>
+        <option value="ECE">ECE</option>
+        <option value="EE">EE</option>
+        <option value="MECH">MECH</option>
+        <option value="CIVIL">CIVIL</option>
+      </select>
+    </div>
+
+    <div class="grid-2" style="margin-bottom:0;">
+      <div>
+        <div class="slider-row"><div class="slider-top"><span>CGPA</span><span id="val-cgpa" class="mono">7.8</span></div><input type="range" id="in-cgpa" min="5.0" max="10.0" step="0.1" value="7.8" oninput="syncAndSim()" /></div>
+        <div class="slider-row"><div class="slider-top"><span>Active Backlogs</span><span id="val-backlogs" class="mono">0</span></div><input type="range" id="in-backlogs" min="0" max="6" step="1" value="0" oninput="syncAndSim()" /></div>
+        <div class="slider-row"><div class="slider-top"><span>DSA & Algorithms</span><span id="val-dsa" class="mono">70</span></div><input type="range" id="in-dsa" min="20" max="100" step="1" value="70" oninput="syncAndSim()" /></div>
+        <div class="slider-row"><div class="slider-top"><span>Python Programming</span><span id="val-python" class="mono">72</span></div><input type="range" id="in-python" min="20" max="100" step="1" value="72" oninput="syncAndSim()" /></div>
+        <div class="slider-row"><div class="slider-top"><span>SQL & Databases</span><span id="val-sql" class="mono">68</span></div><input type="range" id="in-sql" min="20" max="100" step="1" value="68" oninput="syncAndSim()" /></div>
+        <div class="slider-row"><div class="slider-top"><span>Machine Learning</span><span id="val-ml" class="mono">62</span></div><input type="range" id="in-ml" min="15" max="100" step="1" value="62" oninput="syncAndSim()" /></div>
+        <div class="slider-row"><div class="slider-top"><span>Cloud & DevOps</span><span id="val-cloud" class="mono">60</span></div><input type="range" id="in-cloud" min="15" max="100" step="1" value="60" oninput="syncAndSim()" /></div>
+      </div>
+      <div>
+        <div class="slider-row"><div class="slider-top"><span>Web & Full-Stack</span><span id="val-web" class="mono">66</span></div><input type="range" id="in-web" min="15" max="100" step="1" value="66" oninput="syncAndSim()" /></div>
+        <div class="slider-row"><div class="slider-top"><span>Core Engineering</span><span id="val-core" class="mono">62</span></div><input type="range" id="in-core" min="15" max="100" step="1" value="62" oninput="syncAndSim()" /></div>
+        <div class="slider-row"><div class="slider-top"><span>Communication</span><span id="val-comm" class="mono">72</span></div><input type="range" id="in-comm" min="25" max="100" step="1" value="72" oninput="syncAndSim()" /></div>
+        <div class="slider-row"><div class="slider-top"><span>Aptitude & Quant</span><span id="val-apt" class="mono">72</span></div><input type="range" id="in-apt" min="25" max="100" step="1" value="72" oninput="syncAndSim()" /></div>
+        <div class="slider-row"><div class="slider-top"><span>Internships Count</span><span id="val-intern" class="mono">1</span></div><input type="range" id="in-intern" min="0" max="4" step="1" value="1" oninput="syncAndSim()" /></div>
+        <div class="slider-row"><div class="slider-top"><span>Projects Count</span><span id="val-proj" class="mono">3</span></div><input type="range" id="in-proj" min="0" max="8" step="1" value="3" oninput="syncAndSim()" /></div>
+        <div class="slider-row"><div class="slider-top"><span>Coding Rating</span><span id="val-rating" class="mono">1420</span></div><input type="range" id="in-rating" min="800" max="2200" step="20" value="1420" oninput="syncAndSim()" /></div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="kpi-grid" id="sim-kpis" style="grid-template-columns:repeat(3,1fr);"></div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Live Factor Attribution Waterfall</div>
+          <div class="panel-subtitle">How each adjusted parameter pushes placement odds up or down</div>
+        </div>
+      </div>
+      <div id="chart-sim-drivers" class="chart-box" style="height:260px;"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Best-Fit Roles for Simulated Profile</div>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Company</th><th>Role</th><th>Fit</th><th>CTC</th></tr></thead>
+          <tbody id="sim-matches"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let simTimer = null;
+
+function syncAndSim() {
+  document.getElementById('val-cgpa').textContent = document.getElementById('in-cgpa').value;
+  document.getElementById('val-backlogs').textContent = document.getElementById('in-backlogs').value;
+  document.getElementById('val-dsa').textContent = document.getElementById('in-dsa').value;
+  document.getElementById('val-python').textContent = document.getElementById('in-python').value;
+  document.getElementById('val-sql').textContent = document.getElementById('in-sql').value;
+  document.getElementById('val-ml').textContent = document.getElementById('in-ml').value;
+  document.getElementById('val-cloud').textContent = document.getElementById('in-cloud').value;
+  document.getElementById('val-web').textContent = document.getElementById('in-web').value;
+  document.getElementById('val-core').textContent = document.getElementById('in-core').value;
+  document.getElementById('val-comm').textContent = document.getElementById('in-comm').value;
+  document.getElementById('val-apt').textContent = document.getElementById('in-apt').value;
+  document.getElementById('val-intern').textContent = document.getElementById('in-intern').value;
+  document.getElementById('val-proj').textContent = document.getElementById('in-proj').value;
+  document.getElementById('val-rating').textContent = document.getElementById('in-rating').value;
+
+  clearTimeout(simTimer);
+  simTimer = setTimeout(runSimulation, 120);
+}
+
+async function runSimulation() {
+  const payload = {
+    branch: document.getElementById('sim-branch').value,
+    cgpa: parseFloat(document.getElementById('in-cgpa').value),
+    backlogs: parseInt(document.getElementById('in-backlogs').value),
+    dsa_score: parseFloat(document.getElementById('in-dsa').value),
+    python_score: parseFloat(document.getElementById('in-python').value),
+    sql_score: parseFloat(document.getElementById('in-sql').value),
+    ml_score: parseFloat(document.getElementById('in-ml').value),
+    cloud_score: parseFloat(document.getElementById('in-cloud').value),
+    web_score: parseFloat(document.getElementById('in-web').value),
+    core_eng_score: parseFloat(document.getElementById('in-core').value),
+    communication_score: parseFloat(document.getElementById('in-comm').value),
+    aptitude_score: parseFloat(document.getElementById('in-apt').value),
+    internships_count: parseInt(document.getElementById('in-intern').value),
+    projects_count: parseInt(document.getElementById('in-proj').value),
+    coding_rating: parseInt(document.getElementById('in-rating').value),
+  };
+
+  const res = await fetch('/api/predict', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  const p = data.prediction;
+  const pal = PlaceIQ.palette();
+
+  // Updated property mappings to match backend response keys
+  const drv = (p.contributions || []).slice().reverse();
+
+  document.getElementById('sim-kpis').innerHTML = `
+    <div class="kpi-card">
+      <div class="kpi-label">Placement Odds</div>
+      <div class="kpi-value">${p.placement_probability}%</div>
+      <div class="kpi-sub">${PlaceIQ.readinessBadge(p.readiness_band)}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Expected Package</div>
+      <div class="kpi-value">₹${p.expected_lpa} LPA</div>
+      <div class="kpi-sub">Predicted Tier: ${p.predicted_package_band}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Readiness Index</div>
+      <div class="kpi-value">${p.readiness_score}/100</div>
+      <div class="kpi-sub">${p.readiness_band}</div>
+    </div>
+  `;
+
+  Plotly.newPlot('chart-sim-drivers', [{
+    type: 'bar',
+    orientation: 'h',
+    y: drv.map(d => d.label),
+    x: drv.map(d => d.impact_pp),
+    marker: { color: drv.map(d => d.impact_pp >= 0 ? pal[1] : pal[4]) }
+  }], PlaceIQ.plotlyLayout({ margin: { t: 10, b: 30, l: 145, r: 16 } }), PlaceIQ.plotlyConfig());
+
+  document.getElementById('sim-matches').innerHTML = (data.top_matches || []).map(m => `
+    <tr>
+      <td><strong>${m.company_name}</strong></td>
+      <td>${m.role_title}</td>
+      <td class="mono"><strong>${m.fit_score}%</strong></td>
+      <td class="mono">₹${m.package_lpa} LPA</td>
+    </tr>
+  `).join('');
+}
+
+runSimulation();
+</script>
+{% endblock %}
