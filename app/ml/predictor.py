@@ -5,15 +5,25 @@ import pandas as pd
 from app.core.config import MODELS_DIR
 from app.services.data_service import load_metrics
 
-
+def _load_or_retrain(filename: str):
+    path = MODELS_DIR / filename
+    try:
+        return joblib.load(path)
+    except Exception as exc:
+        print(f"[PlaceIQ] Could not load {filename} ({type(exc).__name__}: {exc}). Retraining models...")
+        from scripts.train_models import train_and_evaluate
+        train_and_evaluate()
+        load_metrics.cache_clear()
+        return joblib.load(path)
+    
 @lru_cache(maxsize=1)
 def get_placement_model():
-    return joblib.load(MODELS_DIR / "placement_model.joblib")
+    return _load_or_retrain("placement_model.joblib")
 
 
 @lru_cache(maxsize=1)
 def get_package_model():
-    return joblib.load(MODELS_DIR / "package_model.joblib")
+    return _load_or_retrain("package_model.joblib")
 
 
 def compute_readiness_score(profile: dict) -> tuple[float, str]:

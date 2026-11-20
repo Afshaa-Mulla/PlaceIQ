@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from app.core.config import get_gemini_key, get_gemini_model
 from app.services.data_service import (
-    load_students, load_companies, load_roles, load_metrics,
+    load_students, load_companies, load_roles, load_model_lab_metrics,
     filter_students, compute_role_matches_for_student, SKILL_COLS, SKILL_DISPLAY
 )
 from app.ml.predictor import predict_student_profile
@@ -19,6 +19,7 @@ from app.services.gemini_service import (
 from app.services.excel_service import build_excel_report
 
 router = APIRouter(prefix="/api")
+
 
 def clean_floats(obj):
     if isinstance(obj, (float, np.floating)):
@@ -304,30 +305,7 @@ def get_student_360(student_id: str):
     branch_df = df[df["branch"] == row["branch"]]
     peer_avg = {sk: round(float(branch_df[sk].mean()), 1) for sk in SKILL_COLS}
 
-    cgpa = float(row.get("cgpa", 7.5))
-    dsa = float(row.get("dsa_score", 70))
-    python = float(row.get("python_score", 70))
-    backlogs = int(row.get("backlogs", 0))
-    readiness_score = float(row.get("readiness_score", 75.0))
-    readiness_band = str(row.get("readiness_band", "Industry Ready"))
-    
-    contributions = [
-        {"label": "CGPA", "impact_pp": round((cgpa - 7.0) * 4.2, 1)},
-        {"label": "DSA Score", "impact_pp": round((dsa - 60) * 0.22, 1)},
-        {"label": "Python Score", "impact_pp": round((python - 60) * 0.18, 1)},
-        {"label": "Active Backlogs", "impact_pp": round(-8.0 * backlogs, 1)},
-        {"label": "Internships", "impact_pp": round(float(row.get("internships_count", 1)) * 5.5, 1)},
-        {"label": "Projects", "impact_pp": round(float(row.get("projects_count", 2)) * 2.8, 1)},
-    ]
-
-    prediction = {
-        "placement_probability": int(min(98, max(25, readiness_score * 1.1))),
-        "readiness_score": readiness_score,
-        "readiness_band": readiness_band,
-        "expected_lpa": float(row.get("package_lpa", 8.5) if row.get("placed") == 1 else 7.5),
-        "predicted_package_band": str(row.get("package_category", "Tier-2")),
-        "contributions": contributions
-    }
+    prediction = predict_student_profile(row)
 
     matches = compute_role_matches_for_student(row, top_n=12)
 
@@ -343,84 +321,11 @@ def get_student_360(student_id: str):
 @router.post("/predict")
 def run_prediction(req: PredictRequest):
     payload = req.model_dump()
-    
-    cgpa = payload["cgpa"]
-    dsa = payload["dsa_score"]
-    python = payload["python_score"]
-    sql = payload["sql_score"]
-    ml = payload["ml_score"]
-    web = payload["web_score"]
-    cloud = payload["cloud_score"]
-    core = payload["core_eng_score"]
-    comm = payload["communication_score"]
-    apt = payload["aptitude_score"]
-    backlogs = payload["backlogs"]
-    internships = payload["internships_count"]
-    projects = payload["projects_count"]
-    rating = payload["coding_rating"]
-    
-    readiness_score = min(100.0, max(0.0, round(
-        0.22 * (cgpa * 10)
-        + 0.15 * dsa
-        + 0.10 * python
-        + 0.08 * sql
-        + 0.08 * ml
-        + 0.06 * web
-        + 0.06 * cloud
-        + 0.06 * core
-        + 0.10 * comm
-        + 0.05 * apt
-        + 0.08 * (internships * 20)
-        + 0.06 * (projects * 12)
-        + 0.05 * (rating / 20)
-        - 4.50 * backlogs, 1
-    )))
-    
-    if readiness_score >= 72:
-        band = "Industry Ready"
-        pkg_band = "Tier-1 (12+ LPA)"
-        expected_lpa = 14.5
-        prob = 92
-    elif readiness_score >= 52:
-        band = "Developing"
-        pkg_band = "Enterprise (6–12 LPA)"
-        expected_lpa = 7.8
-        prob = 74
-    else:
-        band = "Needs Upskilling"
-        pkg_band = "Service / Low Tier (<6 LPA)"
-        expected_lpa = 4.2
-        prob = 38
-
-    contributions = [
-        {"label": "CGPA", "impact_pp": round((cgpa - 7.0) * 4.2, 1)},
-        {"label": "DSA Score", "impact_pp": round((dsa - 60) * 0.22, 1)},
-        {"label": "Python Score", "impact_pp": round((python - 60) * 0.18, 1)},
-        {"label": "SQL Score", "impact_pp": round((sql - 60) * 0.15, 1)},
-        {"label": "Machine Learning", "impact_pp": round((ml - 55) * 0.15, 1)},
-        {"label": "Full-Stack Web", "impact_pp": round((web - 55) * 0.12, 1)},
-        {"label": "Cloud & DevOps", "impact_pp": round((cloud - 50) * 0.12, 1)},
-        {"label": "Core Engineering", "impact_pp": round((core - 55) * 0.12, 1)},
-        {"label": "Communication", "impact_pp": round((comm - 60) * 0.20, 1)},
-        {"label": "Aptitude & Quant", "impact_pp": round((apt - 60) * 0.15, 1)},
-        {"label": "Active Backlogs", "impact_pp": round(-8.0 * backlogs, 1)},
-        {"label": "Internships Count", "impact_pp": round(internships * 5.5, 1)},
-        {"label": "Projects Count", "impact_pp": round(projects * 2.8, 1)},
-        {"label": "Coding Rating", "impact_pp": round((rating - 1200) * 0.012, 1)},
-    ]
-
+    prediction = predict_student_profile(payload)
     top_matches = compute_role_matches_for_student(payload, top_n=6)
-
-    prediction = {
-        "placement_probability": prob,
-        "readiness_score": readiness_score,
-        "readiness_band": band,
-        "expected_lpa": expected_lpa,
-        "predicted_package_band": pkg_band,
-        "contributions": contributions
-    }
-
     return clean_floats({"prediction": prediction, "top_matches": top_matches})
+
+
 @router.get("/matcher")
 def company_matcher(
     student_id: str = "STU0001",
@@ -522,7 +427,7 @@ def get_skill_gaps(batch: str = "ALL", branch: str = "ALL", student_id: str = "S
 
 @router.get("/model-lab")
 def get_model_lab():
-    return clean_floats(load_metrics())
+    return clean_floats(load_model_lab_metrics())
 
 
 @router.post("/ai/chat")

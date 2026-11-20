@@ -2,6 +2,7 @@ import json
 from app.core.config import get_gemini_key, get_gemini_model
 from app.services.data_service import load_students, compute_role_matches_for_student
 from app.ml.predictor import predict_student_profile
+from app.core.config import get_gemini_key, get_gemini_model_candidates
 
 
 def _call_gemini(prompt: str, system_instruction: str = "") -> tuple[bool, str]:
@@ -12,20 +13,67 @@ def _call_gemini(prompt: str, system_instruction: str = "") -> tuple[bool, str]:
             "(`GEMINI_API_KEY=AIza...`) and restart Uvicorn to unlock live AI responses. "
             "All ML predictions, dashboards, and reports remain 100% functional without a key."
         )
-    try:
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        
-        full_prompt = f"{system_instruction}\n\n{prompt}" if system_instruction else prompt
-        
-        model = genai.GenerativeModel(
-            model_name=get_gemini_model(),
-            generation_config={"temperature": 0.45}
-        )
-        resp = model.generate_content(full_prompt)
-        return True, (resp.text or "No response returned from Gemini.")
-    except Exception as exc:
-        return False, f"Gemini API error: {exc}. Verify your GEMINI_API_KEY in `.env` and internet connection."
+        try:
+            from google import genai
+            from google.genai import types
+
+            client = genai.Client(api_key=api_key)
+
+            config = types.GenerateContentConfig(
+                temperature=0.45,
+                system_instruction=system_instruction or None,
+            )
+
+            last_exc = None
+
+            for model_name in get_gemini_model_candidates():
+                try:
+                    resp = client.models.generate_content(
+                        model=model_name,
+                        contents=prompt,
+                        config=config,
+                    )
+
+                    text = (resp.text or "").strip()
+                    return True, text or "No response returned from Gemini."
+
+                except Exception as exc:
+                    last_exc = exc
+                    msg = str(exc).lower()
+
+                    if not any(
+                        k in msg
+                        for k in (
+                            "404",
+                            "not found",
+                            "not_found",
+                            "503",
+                            "unavailable",
+                            "overloaded",
+                            "429",
+                            "quota",
+                            "resource_exhausted",
+                        )
+                    ):
+                        break
+
+            return False, (
+                f"Gemini API error: {last_exc}. "
+                "Verify GEMINI_API_KEY / GEMINI_MODEL in `.env` "
+                "and your internet connection."
+            )
+
+        except ImportError:
+            return False, (
+                "The `google-genai` package is not installed. "
+                "Run `pip install -U google-genai` and restart the server."
+            )
+
+        except Exception as exc:
+            return False, (
+        f"Gemini API error: {exc}. "
+        "Verify your GEMINI_API_KEY in `.env` and internet connection."
+    )
 
 
 def get_student_context(student_id: str) -> dict:

@@ -50,8 +50,15 @@ def load_roles() -> pd.DataFrame:
     return pd.read_csv(DATA_RAW_DIR / "job_roles.csv")
 
 
-@lru_cache(maxsize=1)
-def load_metrics() -> dict:
+def _read_json(name: str) -> dict:
+    path = MODELS_DIR / name
+    if path.exists():
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+#@lru_cache(maxsize=1)
+def _build_model_lab_metrics() -> dict:
     try:
         df = load_students()
         feature_cols = [
@@ -160,6 +167,25 @@ def load_metrics() -> dict:
         }
     except Exception:
         return {}
+
+    
+    @lru_cache(maxsize=1)
+    def load_metrics() -> dict:
+        meta = _read_json("model_metrics.json")
+        if not meta:
+            raise FileNotFoundError(
+                "models/model_metrics.json missing - run `python scripts/train_models.py`."
+            )
+        return meta
+
+
+    @lru_cache(maxsize=1)
+    def load_model_lab_metrics() -> dict:
+        data = _read_json("model_lab_metrics.json")
+        if not data.get("classification"):
+            data = _build_model_lab_metrics()
+        return data
+
 
 
 def filter_students(batch=None, branch=None, readiness=None, placed=None, search=None) -> pd.DataFrame:

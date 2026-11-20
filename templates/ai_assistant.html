@@ -86,14 +86,19 @@ async function sendChat() {
   appendMsg('user', msg);
   const pending = appendMsg('assistant', 'Thinking with Gemini...');
 
-  const res = await fetch('/api/ai/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ student_id: sid, message: msg, history: historyLog })
-  });
-  const data = await res.json();
-  pending.textContent = data.reply;
-  historyLog.push({ role: 'user', content: msg }, { role: 'assistant', content: data.reply });
+  try {
+    const res = await fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ student_id: sid, message: msg, history: historyLog })
+    });
+    if (!res.ok) throw new Error('Server returned ' + res.status);
+    const data = await res.json();
+    pending.textContent = data.reply;
+    historyLog.push({ role: 'user', content: msg }, { role: 'assistant', content: data.reply });
+  } catch (err) {
+    pending.textContent = 'Request failed: ' + err.message;
+  }
 }
 
 async function generateRoadmap() {
@@ -101,21 +106,33 @@ async function generateRoadmap() {
   const role = document.getElementById('roadmap-role').value.trim();
   const out = document.getElementById('roadmap-output');
   out.textContent = 'Generating personalized 30-60-90 day roadmap...';
-  const res = await fetch('/api/ai/roadmap', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ student_id: sid, target_role: role })
-  });
-  const data = await res.json();
-  out.textContent = data.roadmap;
+
+  try {
+    const res = await fetch('/api/ai/roadmap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ student_id: sid, target_role: role })
+    });
+    if (!res.ok) throw new Error('Server returned ' + res.status);
+    const data = await res.json();
+    out.textContent = data.roadmap;
+  } catch (err) {
+    out.textContent = 'Request failed: ' + err.message;
+  }
 }
 
 async function generateExecBrief() {
   const out = document.getElementById('exec-output');
   out.textContent = 'Synthesizing executive placement briefing...';
-  const res = await fetch('/api/ai/batch-summary');
-  const data = await res.json();
-  out.textContent = data.report;
+
+  try {
+    const res = await fetch('/api/ai/batch-summary');
+    if (!res.ok) throw new Error('Server returned ' + res.status);
+    const data = await res.json();
+    out.textContent = data.report;
+  } catch (err) {
+    out.textContent = 'Request failed: ' + err.message;
+  }
 }
 </script>
 {% endblock %}

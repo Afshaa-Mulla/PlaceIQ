@@ -21,5 +21,18 @@ def get_gemini_key() -> str:
         return ""
     return key
 
+#def get_gemini_model() -> str:
+#    return os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
+DEFAULT_GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest"]
+
+
 def get_gemini_model() -> str:
-    return os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
+    return os.getenv("GEMINI_MODEL", "").strip() or DEFAULT_GEMINI_MODELS[0]
+
+
+def get_gemini_model_candidates() -> list:
+    out = []
+    for m in [get_gemini_model()] + DEFAULT_GEMINI_MODELS:
+        if m not in out:
+            out.append(m)
+    return out
