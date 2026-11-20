@@ -57,7 +57,8 @@ def _read_json(name: str) -> dict:
             return json.load(f)
     return {}
 
-#@lru_cache(maxsize=1)
+
+# @lru_cache(maxsize=1)
 def _build_model_lab_metrics() -> dict:
     try:
         df = load_students()
@@ -69,45 +70,45 @@ def _build_model_lab_metrics() -> dict:
             "projects_count", "internships_count", "certifications_count",
             "hackathons_count", "coding_rating"
         ]
-        
+
         X = df[feature_cols].fillna(0)
         y_clf = df["placed"].fillna(0)
         y_reg = df["package_lpa"].fillna(0)
-        
+
         X_train, X_test, y_train_c, y_test_c = train_test_split(X, y_clf, test_size=0.2, random_state=42)
         _, _, y_train_r, y_test_r = train_test_split(X, y_reg, test_size=0.2, random_state=42)
-        
+
         models_clf = {
             "Logistic Regression": LogisticRegression(max_iter=1000, random_state=42),
             "Random Forest": RandomForestClassifier(n_estimators=100, random_state=42),
             "Gradient Boosting": GradientBoostingClassifier(random_state=42)
         }
-        
+
         classification_results = []
         best_clf_name = "Gradient Boosting"
         best_roc_auc = -1
-        
+
         for name, model in models_clf.items():
             model.fit(X_train, y_train_c)
             preds = model.predict(X_test)
             probs = model.predict_proba(X_test)[:, 1]
-            
+
             acc = accuracy_score(y_test_c, preds)
             prec = precision_score(y_test_c, preds, zero_division=0)
             rec = recall_score(y_test_c, preds, zero_division=0)
             f1 = f1_score(y_test_c, preds, zero_division=0)
             auc_score = roc_auc_score(y_test_c, probs)
-            
+
             fpr, tpr, _ = roc_curve(y_test_c, probs)
             precision_vals, recall_vals, _ = precision_recall_curve(y_test_c, probs)
             cm = confusion_matrix(y_test_c, preds).tolist()
-            
+
             if auc_score > best_roc_auc:
                 best_roc_auc = auc_score
                 best_clf_name = name
-                
+
             pr_auc_val = auc(recall_vals, precision_vals)
-            
+
             classification_results.append({
                 "model": name,
                 "accuracy": round(float(acc), 3),
@@ -126,23 +127,23 @@ def _build_model_lab_metrics() -> dict:
             "Random Forest Regressor": RandomForestRegressor(n_estimators=100, random_state=42),
             "Gradient Boosting Regressor": GradientBoostingRegressor(random_state=42)
         }
-        
+
         regression_results = []
         best_reg_name = "Gradient Boosting Regressor"
         best_r2 = -999
-        
+
         for name, model in models_reg.items():
             model.fit(X_train, y_train_r)
             preds = model.predict(X_test)
-            
+
             mae = mean_absolute_error(y_test_r, preds)
             rmse = np.sqrt(mean_squared_error(y_test_r, preds))
             r2 = r2_score(y_test_r, preds)
-            
+
             if r2 > best_r2:
                 best_r2 = r2
                 best_reg_name = name
-                
+
             regression_results.append({
                 "model": name,
                 "mae_lpa": round(float(mae), 2),
@@ -168,24 +169,23 @@ def _build_model_lab_metrics() -> dict:
     except Exception:
         return {}
 
-    
-    @lru_cache(maxsize=1)
-    def load_metrics() -> dict:
-        meta = _read_json("model_metrics.json")
-        if not meta:
-            raise FileNotFoundError(
-                "models/model_metrics.json missing - run `python scripts/train_models.py`."
-            )
-        return meta
+
+@lru_cache(maxsize=1)
+def load_metrics() -> dict:
+    meta = _read_json("model_metrics.json")
+    if not meta:
+        raise FileNotFoundError(
+            "models/model_metrics.json missing - run `python scripts/train_models.py`."
+        )
+    return meta
 
 
-    @lru_cache(maxsize=1)
-    def load_model_lab_metrics() -> dict:
-        data = _read_json("model_lab_metrics.json")
-        if not data.get("classification"):
-            data = _build_model_lab_metrics()
-        return data
-
+@lru_cache(maxsize=1)
+def load_model_lab_metrics() -> dict:
+    data = _read_json("model_lab_metrics.json")
+    if not data.get("classification"):
+        data = _build_model_lab_metrics()
+    return data
 
 
 def filter_students(batch=None, branch=None, readiness=None, placed=None, search=None) -> pd.DataFrame:
