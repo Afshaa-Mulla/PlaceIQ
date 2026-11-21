@@ -2,7 +2,8 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")   
+
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DATA_RAW_DIR = ROOT_DIR / "data" / "raw"
@@ -13,17 +14,26 @@ STATIC_DIR = ROOT_DIR / "static"
 
 APP_NAME = "PlaceIQ"
 APP_TAGLINE = "AI-Powered Campus Placement Intelligence & Career Readiness Suite"
-SYNTHETIC_NOTICE = "Dataset Notice: 100% synthetic multi-branch dataset (1,800 students across 4 batches & 7 engineering branches, 45 companies, 57 roles) engineered for academic demonstration."
+SYNTHETIC_NOTICE = (
+    "Dataset Notice: 100% synthetic multi-branch dataset (1,800 students across "
+    "4 batches & 7 engineering branches, 45 companies, 57 roles) engineered for "
+    "academic demonstration."
+)
+
+DEFAULT_GEMINI_MODELS = [
+    "gemini-3.8-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-2.5-flash-lite",
+]
+
 
 def get_gemini_key() -> str:
     key = os.getenv("GEMINI_API_KEY", "").strip()
     if not key or key == "your_gemini_api_key_here":
         return ""
     return key
-
-#def get_gemini_model() -> str:
-#    return os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
-DEFAULT_GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest"]
 
 
 def get_gemini_model() -> str:
@@ -33,6 +43,6 @@ def get_gemini_model() -> str:
 def get_gemini_model_candidates() -> list:
     out = []
     for m in [get_gemini_model()] + DEFAULT_GEMINI_MODELS:
-        if m not in out:
+        if m and m not in out:
             out.append(m)
     return out

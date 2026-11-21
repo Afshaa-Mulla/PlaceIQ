@@ -5,6 +5,7 @@ import pandas as pd
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+import traceback
 
 from app.core.config import get_gemini_key, get_gemini_model
 from app.services.data_service import (
@@ -429,15 +430,30 @@ def get_skill_gaps(batch: str = "ALL", branch: str = "ALL", student_id: str = "S
 def get_model_lab():
     return clean_floats(load_model_lab_metrics())
 
+#adding to check error
+def _safe(fn, *args):
+    try:
+        return fn(*args)
+    except Exception as exc:
+        traceback.print_exc()
+        err_msg = f"Backend error: {type(exc).__name__}: {exc}"
+        return {
+            "success": False,
+            "configured": True,
+            "reply": err_msg,
+            "roadmap": err_msg,
+            "answer": err_msg,
+            "report": err_msg,
+        }
 
 @router.post("/ai/chat")
 def ai_chat(req: ChatRequest):
-    return chat_with_career_assistant(req.student_id, req.message, req.history)
+    return _safe(chat_with_career_assistant, req.student_id, req.message, req.history)
 
 
 @router.post("/ai/roadmap")
 def ai_roadmap(req: RoadmapRequest):
-    return generate_30_60_90_roadmap(req.student_id, req.target_role)
+    return _safe(generate_30_60_90_roadmap, req.student_id, req.target_role)
 
 
 @router.post("/ai/nlq")

@@ -1,8 +1,8 @@
 import json
-from app.core.config import get_gemini_key, get_gemini_model
+import traceback
+from app.core.config import get_gemini_key, get_gemini_model, get_gemini_model_candidates
 from app.services.data_service import load_students, compute_role_matches_for_student
 from app.ml.predictor import predict_student_profile
-from app.core.config import get_gemini_key, get_gemini_model_candidates
 
 
 def _call_gemini(prompt: str, system_instruction: str = "") -> tuple[bool, str]:
@@ -13,72 +13,74 @@ def _call_gemini(prompt: str, system_instruction: str = "") -> tuple[bool, str]:
             "(`GEMINI_API_KEY=AIza...`) and restart Uvicorn to unlock live AI responses. "
             "All ML predictions, dashboards, and reports remain 100% functional without a key."
         )
-        try:
-            from google import genai
-            from google.genai import types
 
-            client = genai.Client(api_key=api_key)
+    try:
+        from google import genai
+        from google.genai import types
 
-            config = types.GenerateContentConfig(
-                temperature=0.45,
-                system_instruction=system_instruction or None,
-            )
+        client = genai.Client(api_key=api_key)
 
-            last_exc = None
+        config = types.GenerateContentConfig(
+            temperature=0.45,
+            system_instruction=system_instruction or None,
+        )
 
-            for model_name in get_gemini_model_candidates():
-                try:
-                    resp = client.models.generate_content(
-                        model=model_name,
-                        contents=prompt,
-                        config=config,
+        last_exc = None
+
+        for model_name in get_gemini_model_candidates():
+            try:
+                resp = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                    config=config,
+                )
+
+                text = (resp.text or "").strip()
+                return True, text or "No response returned from Gemini."
+
+            except Exception as exc:
+                last_exc = exc
+                msg = str(exc).lower()
+
+                if not any(
+                    k in msg
+                    for k in (
+                        "404",
+                        "not found",
+                        "not_found",
+                        "503",
+                        "unavailable",
+                        "overloaded",
+                        "429",
+                        "quota",
+                        "resource_exhausted",
                     )
+                ):
+                    break
 
-                    text = (resp.text or "").strip()
-                    return True, text or "No response returned from Gemini."
+        return False, (
+            f"Gemini API error: {last_exc}. "
+            "Verify GEMINI_API_KEY / GEMINI_MODEL in `.env` "
+            "and your internet connection."
+        )
 
-                except Exception as exc:
-                    last_exc = exc
-                    msg = str(exc).lower()
+    except ImportError:
+        return False, (
+            "The `google-genai` package is not installed. "
+            "Run `pip install -U google-genai` and restart the server."
+        )
 
-                    if not any(
-                        k in msg
-                        for k in (
-                            "404",
-                            "not found",
-                            "not_found",
-                            "503",
-                            "unavailable",
-                            "overloaded",
-                            "429",
-                            "quota",
-                            "resource_exhausted",
-                        )
-                    ):
-                        break
-
-            return False, (
-                f"Gemini API error: {last_exc}. "
-                "Verify GEMINI_API_KEY / GEMINI_MODEL in `.env` "
-                "and your internet connection."
-            )
-
-        except ImportError:
-            return False, (
-                "The `google-genai` package is not installed. "
-                "Run `pip install -U google-genai` and restart the server."
-            )
-
-        except Exception as exc:
-            return False, (
-        f"Gemini API error: {exc}. "
-        "Verify your GEMINI_API_KEY in `.env` and internet connection."
-    )
+    except Exception as exc:
+        return False, (
+            f"Gemini API error: {exc}. "
+            "Verify your GEMINI_API_KEY in `.env` and internet connection."
+        )
 
 
 def get_student_context(student_id: str) -> dict:
     df = load_students()
-    match = df[df["student_id"] == student_id]
+    clean_id = (student_id or "STU0001").strip().upper()
+    match = df[df["student_id"].astype(str).str.upper() == clean_id]
     if match.empty:
         row = df.iloc[0].to_dict()
     else:
@@ -89,14 +91,15 @@ def get_student_context(student_id: str) -> dict:
 
 
 def chat_with_career_assistant(student_id: str, message: str, history: list | None = None) -> dict:
-    ctx = get_student_context(student_id)
-    s = ctx["student"]
-    p = ctx["prediction"]
-    top_roles_summary = [
-        f"{r['company_name']} - {r['role_title']} ({r['package_lpa']} LPA, Fit {r['fit_score']}%, Gaps: {[g['label']+': -'+str(g['gap']) for g in r['skill_gaps'] if g['gap']>0]})"
-        for r in ctx["top_roles"][:3]
-    ]
-    prompt = f"""Student Profile Context:
+    try:
+        ctx = get_student_context(student_id)
+        s = ctx["student"]
+        p = ctx["prediction"]
+        top_roles_summary = [
+            f"{r['company_name']} - {r['role_title']} ({r['package_lpa']} LPA, Fit {r['fit_score']}%, Gaps: {[g['label']+': -'+str(g['gap']) for g in r['skill_gaps'] if g['gap']>0]})"
+            for r in ctx["top_roles"][:3]
+        ]
+        prompt = f"""Student Profile Context:
 - ID & Name: {s['student_id']} ({s['name']}) | Branch: {s['branch']} ({s['branch_name']}) | Batch: {s['batch']}
 - Academics: CGPA {s['cgpa']}/10, 10th {s['tenth_pct']}%, 12th {s['twelfth_pct']}%, Active Backlogs: {s['backlogs']}
 - Technical Skills (0-100): Python {s['python_score']}, SQL {s['sql_score']}, ML {s['ml_score']}, DSA {s['dsa_score']}, Web {s['web_score']}, Cloud {s['cloud_score']}, Core Eng {s['core_eng_score']}
@@ -110,22 +113,35 @@ Conversation History: {json.dumps((history or [])[-6:])}
 Student Question: {message}
 
 Provide a clear, structured, personalized answer grounded in the exact numbers above."""
-    system_inst = (
-        "You are PlaceIQ Career Intelligence AI, an expert campus placement advisor and "
-        "analytics assistant. Ground every recommendation strictly in the student and cohort "
-        "metrics provided. Be concise, specific, actionable, and encouraging."
-    )
-    ok, reply = _call_gemini(prompt, system_instruction=system_inst)
-    return {"configured": bool(get_gemini_key()), "success": ok, "reply": reply, "student_id": s["student_id"]}
+        system_inst = (
+            "You are PlaceIQ Career Intelligence AI, an expert campus placement advisor and "
+            "analytics assistant. Ground every recommendation strictly in the student and cohort "
+            "metrics provided. Be concise, specific, actionable, and encouraging."
+        )
+        ok, reply = _call_gemini(prompt, system_instruction=system_inst)
+        return {"configured": bool(get_gemini_key()), "success": ok, "reply": reply, "student_id": s["student_id"]}
+    except Exception as exc:
+        traceback.print_exc()
+        return {
+            "configured": bool(get_gemini_key()),
+            "success": False,
+            "reply": f"Assistant error ({type(exc).__name__}): {exc}",
+            "student_id": (student_id or "STU0001").strip().upper(),
+        }
 
 
 def generate_30_60_90_roadmap(student_id: str, target_role: str = "") -> dict:
-    ctx = get_student_context(student_id)
-    s = ctx["student"]
-    p = ctx["prediction"]
-    chosen_role = target_role or (ctx["top_roles"][0]["role_title"] + " at " + ctx["top_roles"][0]["company_name"] if ctx["top_roles"] else "Software / Core Engineer")
+    try:
+        ctx = get_student_context(student_id)
+        s = ctx["student"]
+        p = ctx["prediction"]
+        chosen_role = target_role or (
+            ctx["top_roles"][0]["role_title"] + " at " + ctx["top_roles"][0]["company_name"]
+            if ctx["top_roles"]
+            else "Software / Core Engineer"
+        )
 
-    prompt = f"""Create a concrete, personalized 30-60-90 Day Placement Preparation Roadmap for:
+        prompt = f"""Create a concrete, personalized 30-60-90 Day Placement Preparation Roadmap for:
 - Student: {s['name']} ({s['student_id']}) | Branch: {s['branch']} | Batch: {s['batch']}
 - Target Role: {chosen_role}
 - Current Metrics: CGPA {s['cgpa']}, Backlogs {s['backlogs']}, Readiness {p['readiness_score']}/100, Placement Prob {p['placement_probability']}%
@@ -137,13 +153,21 @@ Format using clean Markdown sections:
 ### Days 31–60: Projects, Mock Drives & Portfolio Proof
 ### Days 61–90: Company-Specific Sprints & Interview Mastery
 Include weekly targets, measurable milestones, and specific topics based on their lowest scores."""
-    system_inst = (
-        "You are PlaceIQ Career Intelligence AI, an expert campus placement advisor and "
-        "analytics assistant. Ground every recommendation strictly in the student and cohort "
-        "metrics provided. Be concise, specific, actionable, and encouraging."
-    )
-    ok, reply = _call_gemini(prompt, system_instruction=system_inst)
-    return {"configured": bool(get_gemini_key()), "success": ok, "roadmap": reply, "target_role": chosen_role}
+        system_inst = (
+            "You are PlaceIQ Career Intelligence AI, an expert campus placement advisor and "
+            "analytics assistant. Ground every recommendation strictly in the student and cohort "
+            "metrics provided. Be concise, specific, actionable, and encouraging."
+        )
+        ok, reply = _call_gemini(prompt, system_instruction=system_inst)
+        return {"configured": bool(get_gemini_key()), "success": ok, "roadmap": reply, "target_role": chosen_role}
+    except Exception as exc:
+        traceback.print_exc()
+        return {
+            "configured": bool(get_gemini_key()),
+            "success": False,
+            "roadmap": f"Roadmap error ({type(exc).__name__}): {exc}",
+            "target_role": target_role,
+        }
 
 
 def ask_dashboard_nlq(question: str) -> dict:
